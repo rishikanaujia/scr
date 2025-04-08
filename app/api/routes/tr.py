@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Query, Depends, HTTPException, Path, Body, Request, status
 from typing import Optional, List, Dict, Any, Union
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, create_model
 
 # Assuming these are imported elsewhere
 # from your_error_module import QueryBuildError, DatabaseError
@@ -10,19 +10,19 @@ from pydantic import BaseModel, Field
 API_PREFIX = "/api/v1"
 
 
-# Create a model that matches the actual data structure in each item
+# Create the base model for transaction items
 class TransactionItem(BaseModel):
-    # Make fields nullable by using Optional
-    COMPANYNAME: Optional[str] = None
-    ID: Optional[str] = None
-    TYPE: Optional[str] = None
-    YEAR: Optional[str] = None
-    MONTH: Optional[str] = None
-    DAY: Optional[str] = None
-    COUNTRY: Optional[str] = None
-    INDUSTRY: Optional[str] = None
-    COMPANY: Optional[str] = None
-    SIZE: Optional[float] = None
+    # Use Field with nullable=True to match OpenAPI spec format
+    COMPANYNAME: Optional[str] = Field(default=None, nullable=True)
+    ID: Optional[str] = Field(default=None, nullable=True)
+    TYPE: Optional[str] = Field(default=None, nullable=True)
+    YEAR: Optional[str] = Field(default=None, nullable=True)
+    MONTH: Optional[str] = Field(default=None, nullable=True)
+    DAY: Optional[str] = Field(default=None, nullable=True)
+    COUNTRY: Optional[str] = Field(default=None, nullable=True)
+    INDUSTRY: Optional[str] = Field(default=None, nullable=True)
+    COMPANY: Optional[str] = Field(default=None, nullable=True)
+    SIZE: Optional[float] = Field(default=None, nullable=True)
 
     class Config:
         schema_extra = {
@@ -77,7 +77,7 @@ router = APIRouter(
                             "TYPE": "2"
                         },
                         {
-                            "COMPANYNAME": "Propanc Biopharma, Inc.",
+                            "COMPANYNAME": null,
                             "INDUSTRY": "32",
                             "SIZE": 1200000.00
                         }
