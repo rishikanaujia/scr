@@ -12,17 +12,17 @@ API_PREFIX = "/api/v1"
 
 # Create the base model for transaction items
 class TransactionItem(BaseModel):
-    # Use Field with nullable=True to match OpenAPI spec format
-    COMPANYNAME: Optional[str] = Field(default=None, nullable=True)
-    ID: Optional[str] = Field(default=None, nullable=True)
-    TYPE: Optional[str] = Field(default=None, nullable=True)
-    YEAR: Optional[str] = Field(default=None, nullable=True)
-    MONTH: Optional[str] = Field(default=None, nullable=True)
-    DAY: Optional[str] = Field(default=None, nullable=True)
-    COUNTRY: Optional[str] = Field(default=None, nullable=True)
-    INDUSTRY: Optional[str] = Field(default=None, nullable=True)
-    COMPANY: Optional[str] = Field(default=None, nullable=True)
-    SIZE: Optional[float] = Field(default=None, nullable=True)
+    # Use Field with default=None to make fields nullable
+    COMPANYNAME: Optional[str] = Field(default=None)
+    ID: Optional[str] = Field(default=None)
+    TYPE: Optional[str] = Field(default=None)
+    YEAR: Optional[str] = Field(default=None)
+    MONTH: Optional[str] = Field(default=None)
+    DAY: Optional[str] = Field(default=None)
+    COUNTRY: Optional[str] = Field(default=None)
+    INDUSTRY: Optional[str] = Field(default=None)
+    COMPANY: Optional[str] = Field(default=None)
+    SIZE: Optional[float] = Field(default=None)
 
     class Config:
         schema_extra = {
@@ -37,6 +37,14 @@ class TransactionItem(BaseModel):
                 "INDUSTRY": "32",
                 "COMPANY": "456",
                 "SIZE": 1500000.00
+            }
+        }
+
+    class Config:
+        # This tells Pydantic to use schema with nullable: true for Optional fields
+        json_schema_extra = {
+            "openapi_extra": {
+                "x-nullable": True
             }
         }
 
@@ -77,7 +85,7 @@ router = APIRouter(
                             "TYPE": "2"
                         },
                         {
-                            "COMPANYNAME": null,
+                            "COMPANYNAME": None,  # Use None instead of null
                             "INDUSTRY": "32",
                             "SIZE": 1200000.00
                         }
