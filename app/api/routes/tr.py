@@ -210,3 +210,44 @@ async def get_transactions(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except DatabaseError as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+from fastapi import FastAPI
+from fastapi.openapi.utils import get_openapi
+
+app = FastAPI()
+
+# Add your router
+app.include_router(router)
+
+
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+
+    openapi_schema = get_openapi(
+        title="Your API Title",
+        version="1.0.0",
+        description="Your API Description",
+        routes=app.routes,
+    )
+
+    # Loop through all components/schemas
+    for schema_name, schema in openapi_schema["components"]["schemas"].items():
+        if "properties" in schema:
+            for prop_name, prop in schema["properties"].items():
+                # If property uses anyOf with null, convert to nullable: true format
+                if "anyOf" in prop:
+                    types = [t["type"] for t in prop["anyOf"] if "type" in t and t["type"] != "null"]
+                    if any(t["type"] == "null" for t in prop["anyOf"] if "type" in t):
+                        # There's a null type in anyOf - convert to nullable: true
+                        if len(types) == 1:
+                            prop.pop("anyOf")
+                            prop["type"] = types[0]
+                            prop["nullable"] = True
+
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+
+app.openapi = custom_openapi
