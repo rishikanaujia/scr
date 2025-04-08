@@ -1,48 +1,44 @@
-from fastapi import APIRouter, Query, Depends, HTTPException, Path, Body, Request
-from typing import Optional, List, Dict, Any
+from fastapi import APIRouter, Query, Depends, HTTPException, Path, Body, Request, status
+from typing import Optional, List, Dict, Any, Union
 from pydantic import BaseModel, Field
 
+# Assuming these are imported elsewhere
+# from your_error_module import QueryBuildError, DatabaseError
+# from your_controller_module import TransactionController
 
-# Response models
+# Define API_PREFIX (replace with your actual prefix)
+API_PREFIX = "/api/v1"
+
+
+# Create a model that matches the actual data structure in each item
 class TransactionItem(BaseModel):
-    id: str
-    type: str
-    year: str
-    month: str
-    day: str
-    country: str
-    industry: str
-    company: str
-    companyName: str
-    size: float
-
-    # Add other fields
+    # Make fields nullable by using Optional
+    COMPANYNAME: Optional[str] = None
+    ID: Optional[str] = None
+    TYPE: Optional[str] = None
+    YEAR: Optional[str] = None
+    MONTH: Optional[str] = None
+    DAY: Optional[str] = None
+    COUNTRY: Optional[str] = None
+    INDUSTRY: Optional[str] = None
+    COMPANY: Optional[str] = None
+    SIZE: Optional[float] = None
 
     class Config:
         schema_extra = {
             "example": {
-                "id": "123",
-                "type": "1",
-                "year": "2022",
-                "month": "05",
-                "day": "15",
-                "country": "131",
-                "industry": "32",
-                "company": "456",
-                "companyName": "Example Corp",
-                "size": 1500000.00
+                "COMPANYNAME": "Example Corp",
+                "ID": "123",
+                "TYPE": "1",
+                "YEAR": "2022",
+                "MONTH": "05",
+                "DAY": "15",
+                "COUNTRY": "131",
+                "INDUSTRY": "32",
+                "COMPANY": "456",
+                "SIZE": 1500000.00
             }
         }
-
-
-class TransactionResponse(BaseModel):
-    data: List[TransactionItem]
-    count: int
-    total: int
-
-
-class ErrorResponse(BaseModel):
-    detail: str
 
 
 # Create router
@@ -50,37 +46,61 @@ router = APIRouter(
     prefix=f"{API_PREFIX}",
     tags=["transactions"],
     responses={
-        400: {"model": ErrorResponse, "description": "Bad Request"},
-        500: {"model": ErrorResponse, "description": "Internal Server Error"}
+        status.HTTP_400_BAD_REQUEST: {"description": "Bad Request"},
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {"description": "Internal Server Error"}
     }
 )
 
 
 @router.get(
     "/transactions",
-    response_model=TransactionResponse,
+    response_model=List[TransactionItem],
     responses={
-        200: {
+        status.HTTP_200_OK: {
             "description": "Successful response",
             "content": {
                 "application/json": {
+                    "example": [
+                        {
+                            "COMPANYNAME": "LocalPaper.com LLC",
+                            "ID": "123",
+                            "TYPE": "1",
+                            "YEAR": "2022",
+                            "MONTH": "05",
+                            "DAY": "15",
+                            "COUNTRY": "131",
+                            "INDUSTRY": "32"
+                        },
+                        {
+                            "COMPANYNAME": "B2Digital, Incorporated",
+                            "YEAR": "2022",
+                            "TYPE": "2"
+                        },
+                        {
+                            "COMPANYNAME": "Propanc Biopharma, Inc.",
+                            "INDUSTRY": "32",
+                            "SIZE": 1200000.00
+                        }
+                    ]
+                }
+            }
+        },
+        status.HTTP_400_BAD_REQUEST: {
+            "description": "Bad Request",
+            "content": {
+                "application/json": {
                     "example": {
-                        "data": [
-                            {
-                                "id": "123",
-                                "type": "1",
-                                "year": "2022",
-                                "month": "05",
-                                "day": "15",
-                                "country": "131",
-                                "industry": "32",
-                                "company": "456",
-                                "companyName": "Example Corp",
-                                "size": 1500000.00
-                            }
-                        ],
-                        "count": 1,
-                        "total": 100
+                        "detail": "Invalid filter parameter"
+                    }
+                }
+            }
+        },
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {
+            "description": "Internal Server Error",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Database connection error"
                     }
                 }
             }
@@ -124,17 +144,17 @@ async def get_transactions(
         select: Optional[str] = Query(
             None,
             description="Fields to select (comma-separated)",
-            example="year,month,size,companyName"
+            example="YEAR,MONTH,SIZE,COMPANYNAME"
         ),
         groupBy: Optional[str] = Query(
             None,
             description="Fields to group by (comma-separated)",
-            example="year,industry"
+            example="YEAR,INDUSTRY"
         ),
         orderBy: Optional[str] = Query(
             None,
             description="Fields to order by with direction (field:asc|desc)",
-            example="size:desc,year:desc"
+            example="SIZE:desc,YEAR:desc"
         ),
         limit: Optional[int] = Query(
             None,
@@ -156,9 +176,9 @@ async def get_transactions(
     - Query structure: select, groupBy, orderBy, limit, offset
 
     Examples:
-    - /api/v1/transactions?type=1&year=gte:2020&groupBy=companyName&orderBy=count:desc&limit=10
-    - /api/v1/transactions?type=14&year=2021&country=131&orderBy=size:desc&limit=20
-    - /api/v1/transactions?industry=32,34&country=37&year=2023&orderBy=year:desc,month:desc,day:desc
+    - /api/v1/transactions?type=1&year=gte:2020&groupBy=COMPANYNAME&orderBy=count:desc&limit=10
+    - /api/v1/transactions?type=14&year=2021&country=131&orderBy=SIZE:desc&limit=20
+    - /api/v1/transactions?industry=32,34&country=37&year=2023&orderBy=YEAR:desc,MONTH:desc,DAY:desc
     """
     try:
         # Get all query parameters including ones not explicitly listed
@@ -171,10 +191,14 @@ async def get_transactions(
             params['offset'] = str(offset)
 
         # Process request through controller with pagination
-        return await TransactionController.handle_request(
+        result = await TransactionController.handle_request(
             request_params=params
         )
+
+        # Return the result directly
+        return result
+
     except QueryBuildError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except DatabaseError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
