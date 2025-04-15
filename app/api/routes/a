@@ -1,0 +1,8 @@
+# Generate for all tables
+python -m app.cli.generate_schema --tables ciqTransaction ciqTransactionType ciqCompany ciqSimpleIndustry ciqCountryGeo ciqTransactionToCompanyRel ciqTransactionToCompRelType ciqCompanyRel ciqCurrency ciqAdvisorType ciqTransactionToAdvisor --output-dir app/custom_schema --mock
+
+# Generate for specific tables - for example, just the transaction data
+python -m app.cli.generate_schema --tables ciqTransaction ciqTransactionType --output-dir app/transaction_schema --mock
+
+# Generate for company-related tables
+python -m app.cli.generate_schema --tables ciqCompany ciqSimpleIndustry ciqCountryGeo --output-dir app/company_schema --mock
