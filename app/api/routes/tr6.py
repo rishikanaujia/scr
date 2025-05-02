@@ -1,0 +1,712 @@
+"""API routes for transaction queries."""
+from datetime import datetime
+from typing import Dict, List, Any, Optional
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from pydantic import BaseModel
+
+from app.api.dependencies import get_api_key
+from app.query_builder.controllers.transaction_controller import TransactionController
+from app.utils.errors import QueryBuildError, DatabaseError
+from app.config.settings import settings
+
+# Define API prefix from settings
+API_PREFIX = settings.API_PREFIX
+
+
+# Define response models
+class TransactionResponse(BaseModel):
+    data: List[Dict[str, Any]]  # Using Dict for flexibility
+    query_parameters: Dict[str, str]
+    timestamp: str
+
+
+# Create router
+router = APIRouter(
+    prefix=f"{API_PREFIX}",
+    tags=["transactions"],
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"description": "Bad Request"},
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {"description": "Internal Server Error"}
+    }
+)
+
+
+@router.get(
+    "/transactions",
+    response_model=TransactionResponse,
+    summary="Flexible Transaction Query",
+    description="""
+    Flexible transaction endpoint that supports various query parameters for filtering, grouping, and sorting.
+
+    Common Parameters:
+    - Filter fields: type, year, month, day, country, industry, companyId, size
+    - Special operators: gte:, lte:, gt:, lt:, ne:, like:, between:, null:, notnull:
+    - Query structure: select, groupBy, orderBy, limit, offset
+    - Relationship filters: buyerId, sellerId, targetId, acquirerId, advisorId, advisorTypeId
+    - Mode parameters: count_only, page, page_size, include_relationships, include_advisors
+
+    Examples:
+    - Top companies by acquisition count:
+      ?type=1&year=gte:2020&groupBy=companyName&select=companyName,COUNT(transactionId) AS count&orderBy=count:desc&limit=10
+
+    - Transactions in specific industries and country:
+      ?industry=32,34&country=37&year=2023&orderBy=year:desc,month:desc,day:desc
+
+    - Aggregate query with window function:
+      ?type=14&year=2017&country=7,16,99&currencyId=50&select=transactionId,companyName,country,announcedDay,announcedMonth,announcedYear,transactionSize,currencyId,SUM(transactionSize) OVER (PARTITION BY country) AS totalTransactionValue
+
+    - Company relationship query:
+      ?buyerId=29096&type=2&year=gte:2022&select=transactionId,targetCompanyName,buyerCompanyName,announcedDay,announcedMonth,announcedYear,transactionSize,currencyId,transactionIdTypeName
+
+    - Count with complex filters:
+      ?type=14&industry=60&year=between:2017,2019&select=COUNT(transactionId) AS count&count_only=true
+    """
+)
+async def query_transactions(
+        request: Request,
+        # Transaction type and basic filters
+        type: Optional[str] = Query(
+            None,
+            description="Transaction type ID (e.g., '1' for M&A, '2' for Acquisitions, '7' for Spin-offs, '10' for Fund Raises, '12' for Bankruptcies, '14' for Buybacks)",
+            example="2",
+            openapi_extra={"nullable": True}
+        ),
+        # Date filters
+        year: Optional[str] = Query(
+            None,
+            description="Announced year. Supports operators: gte:, lte:, gt:, lt:, ne:, between:, and comma-separated lists",
+            example="gte:2020",
+            openapi_extra={"nullable": True}
+        ),
+        month: Optional[str] = Query(
+            None,
+            description="Announced month (1-12)",
+            example="05",
+            openapi_extra={"nullable": True}
+        ),
+        day: Optional[str] = Query(
+            None,
+            description="Announced day (1-31)",
+            example="15",
+            openapi_extra={"nullable": True}
+        ),
+        announcedYear: Optional[str] = Query(
+            None,
+            description="Alternative parameter for announced year",
+            example="2023",
+            openapi_extra={"nullable": True}
+        ),
+        announcedMonth: Optional[str] = Query(
+            None,
+            description="Alternative parameter for announced month",
+            example="3",
+            openapi_extra={"nullable": True}
+        ),
+        announcedDay: Optional[str] = Query(
+            None,
+            description="Alternative parameter for announced day",
+            example="21",
+            openapi_extra={"nullable": True}
+        ),
+        # Location and industry filters
+        country: Optional[str] = Query(
+            None,
+            description="Country ID. Multiple values supported with comma separator.",
+            example="131,147",
+            openapi_extra={"nullable": True}
+        ),
+        industry: Optional[str] = Query(
+            None,
+            description="Industry ID. Multiple values supported with comma separator.",
+            example="32,34",
+            openapi_extra={"nullable": True}
+        ),
+        # Company identifiers
+        companyId: Optional[str] = Query(
+            None,
+            description="Company ID (for any role in transaction)",
+            example="21719",
+            openapi_extra={"nullable": True}
+        ),
+        company: Optional[str] = Query(
+            None,
+            description="Alternative parameter for company ID",
+            example="456",
+            openapi_extra={"nullable": True}
+        ),
+        companyName: Optional[str] = Query(
+            None,
+            description="Company name search (partial match)",
+            example="Tech",
+            openapi_extra={"nullable": True}
+        ),
+        involvedCompanyId: Optional[str] = Query(
+            None,
+            description="Company ID that was involved in any role in the transaction",
+            example="972190",
+            openapi_extra={"nullable": True}
+        ),
+        # Transaction details
+        transactionId: Optional[str] = Query(
+            None,
+            description="Specific transaction ID for lookup",
+            example="12345",
+            openapi_extra={"nullable": True}
+        ),
+        transactionSize: Optional[str] = Query(
+            None,
+            description="Transaction size/value. Supports operators: gte:, lte:, gt:, lt:, ne:, null:, notnull:",
+            example="gte:1000000",
+            openapi_extra={"nullable": True}
+        ),
+        size: Optional[str] = Query(
+            None,
+            description="Alternative parameter for transaction size",
+            example="gte:1000000",
+            openapi_extra={"nullable": True}
+        ),
+        statusId: Optional[str] = Query(
+            None,
+            description="Transaction status ID (e.g., '2' for Completed)",
+            example="2",
+            openapi_extra={"nullable": True}
+        ),
+        # Currency related
+        currencyId: Optional[str] = Query(
+            None,
+            description="Currency ID (e.g., '50' for USD)",
+            example="50",
+            openapi_extra={"nullable": True}
+        ),
+        currencyIsoCode: Optional[str] = Query(
+            None,
+            description="Currency ISO code (e.g., USD, EUR)",
+            example="USD",
+            openapi_extra={"nullable": True}
+        ),
+        currencyName: Optional[str] = Query(
+            None,
+            description="Currency name",
+            example="US Dollar",
+            openapi_extra={"nullable": True}
+        ),
+        # Relationship identifiers
+        buyerId: Optional[str] = Query(
+            None,
+            description="Buyer company ID",
+            example="29096",
+            openapi_extra={"nullable": True}
+        ),
+        sellerId: Optional[str] = Query(
+            None,
+            description="Seller company ID",
+            example="112350",
+            openapi_extra={"nullable": True}
+        ),
+        targetId: Optional[str] = Query(
+            None,
+            description="Target company ID",
+            example="789",
+            openapi_extra={"nullable": True}
+        ),
+        acquirerId: Optional[str] = Query(
+            None,
+            description="Acquirer company ID",
+            example="234",
+            openapi_extra={"nullable": True}
+        ),
+        relationType: Optional[str] = Query(
+            None,
+            description="Relation type ID between companies (e.g., '1' for Buyer-Target)",
+            example="1",
+            openapi_extra={"nullable": True}
+        ),
+        transactionToCompRelTypeId: Optional[str] = Query(
+            None,
+            description="Transaction to company relationship type ID",
+            example="1",
+            openapi_extra={"nullable": True}
+        ),
+        transactionToCompanyRelType: Optional[str] = Query(
+            None,
+            description="Transaction to company relationship type name",
+            example="Buyer",
+            openapi_extra={"nullable": True}
+        ),
+        # Related entity names
+        targetCompanyName: Optional[str] = Query(
+            None,
+            description="Target company name (for search)",
+            example="Target Corp",
+            openapi_extra={"nullable": True}
+        ),
+        buyerCompanyName: Optional[str] = Query(
+            None,
+            description="Buyer company name (for search)",
+            example="Buyer Inc",
+            openapi_extra={"nullable": True}
+        ),
+        sellerCompanyName: Optional[str] = Query(
+            None,
+            description="Seller company name (for search)",
+            example="Seller Ltd",
+            openapi_extra={"nullable": True}
+        ),
+        involvedCompanyName: Optional[str] = Query(
+            None,
+            description="Name of company involved in transaction",
+            example="Involved Corp",
+            openapi_extra={"nullable": True}
+        ),
+        # Industry descriptors
+        simpleIndustryDescription: Optional[str] = Query(
+            None,
+            description="Simple industry description (for search)",
+            example="Technology",
+            openapi_extra={"nullable": True}
+        ),
+        targetIndustryDescription: Optional[str] = Query(
+            None,
+            description="Target company industry description",
+            example="Software",
+            openapi_extra={"nullable": True}
+        ),
+        buyerIndustryDescription: Optional[str] = Query(
+            None,
+            description="Buyer company industry description",
+            example="Hardware",
+            openapi_extra={"nullable": True}
+        ),
+        # Transaction type name
+        transactionIdTypeName: Optional[str] = Query(
+            None,
+            description="Transaction type name",
+            example="Acquisition",
+            openapi_extra={"nullable": True}
+        ),
+        # Cross filters (by country or industry for related entities)
+        buyerCountry: Optional[str] = Query(
+            None,
+            description="Buyer company country ID",
+            example="213",
+            openapi_extra={"nullable": True}
+        ),
+        targetCountry: Optional[str] = Query(
+            None,
+            description="Target company country ID",
+            example="37",
+            openapi_extra={"nullable": True}
+        ),
+        buyerIndustry: Optional[str] = Query(
+            None,
+            description="Buyer company industry ID",
+            example="56",
+            openapi_extra={"nullable": True}
+        ),
+        targetIndustry: Optional[str] = Query(
+            None,
+            description="Target company industry ID",
+            example="61",
+            openapi_extra={"nullable": True}
+        ),
+        # Advisor related
+        advisorId: Optional[str] = Query(
+            None,
+            description="Advisor company ID",
+            example="398625",
+            openapi_extra={"nullable": True}
+        ),
+        advisorTypeId: Optional[str] = Query(
+            None,
+            description="Advisor type ID (e.g., '2' for Legal)",
+            example="2",
+            openapi_extra={"nullable": True}
+        ),
+        advisorCompanyName: Optional[str] = Query(
+            None,
+            description="Advisor company name (for search)",
+            example="Legal Advisors Inc",
+            openapi_extra={"nullable": True}
+        ),
+        # Query structure parameters
+        select: Optional[str] = Query(
+            None,
+            description="Fields to select (comma-separated), can include functions like COUNT(), SUM(), AVG()",
+            example="companyName,COUNT(transactionId) AS count",
+            openapi_extra={"nullable": True}
+        ),
+        groupBy: Optional[str] = Query(
+            None,
+            description="Fields to group by (comma-separated)",
+            example="companyName,announcedYear",
+            openapi_extra={"nullable": True}
+        ),
+        orderBy: Optional[str] = Query(
+            None,
+            description="Fields to order by with direction (field:asc|desc)",
+            example="transactionSize:desc,announcedYear:desc",
+            openapi_extra={"nullable": True}
+        ),
+        limit: Optional[int] = Query(
+            None,
+            description="Maximum number of results",
+            example=20,
+            ge=1,
+            openapi_extra={"nullable": True}
+        ),
+        offset: Optional[int] = Query(
+            None,
+            description="Number of results to skip",
+            example=0,
+            ge=0,
+            openapi_extra={"nullable": True}
+        ),
+        # Special operation mode parameters
+        count_only: Optional[bool] = Query(
+            False,
+            description="Return only the count of matching transactions",
+            example=False
+        ),
+        page: Optional[int] = Query(
+            None,
+            description="Page number for pagination",
+            example=1,
+            ge=1,
+            openapi_extra={"nullable": True}
+        ),
+        page_size: Optional[int] = Query(
+            None,
+            description="Number of items per page",
+            example=10,
+            ge=1,
+            openapi_extra={"nullable": True}
+        ),
+        include_relationships: Optional[bool] = Query(
+            False,
+            description="Include related company relationships",
+            example=False
+        ),
+        include_advisors: Optional[bool] = Query(
+            False,
+            description="Include transaction advisors",
+            example=False
+        ),
+        includeAdvisors: Optional[str] = Query(
+            None,
+            description="Alternative parameter to include advisors ('true'/'false')",
+            example="true",
+            openapi_extra={"nullable": True}
+        ),
+        # Analysis parameters
+        analysisType: Optional[str] = Query(
+            None,
+            description="Type of analysis to perform",
+            example="trend",
+            openapi_extra={"nullable": True}
+        ),
+        fields: Optional[str] = Query(
+            None,
+            description="Fields to include in analysis (comma-separated)",
+            example="year,month,size",
+            openapi_extra={"nullable": True}
+        ),
+        api_key: Dict = Depends(get_api_key)
+):
+    try:
+        # Build parameters dictionary from provided values
+        params = {}
+
+        # Get all local variables except these excluded ones
+        exclude_keys = ['request', 'api_key', 'params']
+
+        # Add explicitly defined parameters that were provided (not None)
+        for key, value in locals().items():
+            if key not in exclude_keys and value is not None:
+                params[key] = value
+
+        # Handle parameter aliases and transformations
+
+        # Handle company parameter alias
+        if 'company' in params and 'companyId' not in params:
+            params['companyId'] = params.pop('company')
+
+        # Handle size parameter alias
+        if 'size' in params and 'transactionSize' not in params:
+            params['transactionSize'] = params.pop('size')
+
+        # Handle includeAdvisors string to boolean conversion
+        if 'includeAdvisors' in params:
+            include_advisors_str = params.pop('includeAdvisors')
+            if include_advisors_str.lower() == 'true' and not params.get('include_advisors', False):
+                params['include_advisors'] = True
+
+        # Handle announced date components from year/month/day if not using announcedYear/Month/Day
+        if 'year' in params and 'announcedYear' not in params:
+            params['announcedYear'] = params.get('year')
+
+        if 'month' in params and 'announcedMonth' not in params:
+            params['announcedMonth'] = params.get('month')
+
+        if 'day' in params and 'announcedDay' not in params:
+            params['announcedDay'] = params.get('day')
+
+        # Handle special operation modes
+        # -----------------------------
+
+        # Check if it's a single transaction lookup by ID
+        transaction_id = params.pop('transactionId', None)
+        if transaction_id:
+            # Get include flags
+            include_relationships = params.pop('include_relationships', False)
+            include_advisors = params.pop('include_advisors', False)
+
+            transaction = await TransactionController.get_transaction_with_related(
+                int(transaction_id),
+                include_relationships,
+                include_advisors
+            )
+
+            if not transaction:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Transaction {transaction_id} not found"
+                )
+
+            return {
+                "data": [transaction],
+                "query_parameters": {"transactionId": transaction_id, **params},
+                "timestamp": datetime.now().isoformat()
+            }
+
+        # Check if count-only mode is requested
+        count_only = params.pop('count_only', False)
+        if count_only:
+            count = await TransactionController.count_transactions(params)
+            return {
+                "data": [{"count": count}],
+                "query_parameters": params,
+                "timestamp": datetime.now().isoformat()
+            }
+
+        # Check if pagination is requested
+        page = params.pop('page', None)
+        page_size = params.pop('page_size', None)
+        if page is not None:
+            try:
+                page_num = int(page)
+                page_size_num = int(page_size) if page_size else settings.DEFAULT_LIMIT
+            except ValueError:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid page or page_size parameter"
+                )
+
+            result = await TransactionController.get_transactions_with_pagination(
+                params,
+                page_num,
+                page_size_num
+            )
+
+            return {
+                "data": result['data'],
+                "query_parameters": {
+                    **params,
+                    "page": str(page),
+                    "page_size": str(page_size_num),
+                    "total_count": str(result['pagination']['total_count']),
+                    "total_pages": str(result['pagination']['total_pages'])
+                },
+                "timestamp": datetime.now().isoformat()
+            }
+
+        # Handle special relationship parameters
+        # --------------------------------------
+
+        # Handle relationship types (convert to appropriate join parameters)
+        if 'relationType' in params:
+            relation_type = params.pop('relationType')
+            # Add the appropriate parameter for the filter parser
+            params['transactionToCompRelTypeId'] = relation_type
+
+        # Handle currency ISO code
+        if 'currencyIsoCode' in params:
+            # This would need to be translated to currencyId
+            iso_code = params.pop('currencyIsoCode')
+            # Expanded currency lookup dictionary based on common currencies
+            currency_lookup = {
+                "USD": "50", "EUR": "49", "GBP": "22", "JPY": "63",
+                "CAD": "26", "AUD": "25", "CHF": "28", "CNY": "86",
+                "HKD": "87", "SGD": "89", "INR": "92", "BRL": "93"
+            }
+            if iso_code in currency_lookup:
+                params['currencyId'] = currency_lookup[iso_code]
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Unknown currency ISO code: {iso_code}"
+                )
+
+        # Handle analytics parameters
+        # --------------------------
+
+        # Check for analysis type
+        analysis_type = params.pop('analysisType', None)
+        fields_str = params.pop('fields', None)
+        if analysis_type:
+            fields_list = [f.strip() for f in fields_str.split(',')] if fields_str else None
+
+            # Execute analysis
+            result = await TransactionController.analyze_transactions(params, analysis_type, fields_list)
+
+            return {
+                "data": result,
+                "query_parameters": {
+                    **params,
+                    "analysisType": analysis_type,
+                    "fields": fields_str or ""
+                },
+                "timestamp": datetime.now().isoformat()
+            }
+
+        # Check for advisor relationships
+        advisor_id = params.get('advisorId', None)
+        advisor_type = params.get('advisorTypeId', None)
+        if advisor_id or advisor_type or 'advisorCompanyName' in params:
+            # Set flag to include advisor information
+            params['include_advisors'] = True
+
+        # Handle entity specific queries
+        if ('buyerCountry' in params or 'buyerIndustry' in params or
+                'targetCountry' in params or 'targetIndustry' in params):
+            # These fields indicate cross-entity filtering
+            params['include_relationships'] = True
+
+        # Standard query execution
+        # -----------------------
+        result = await TransactionController.get_transactions(params)
+
+        return {
+            "data": result,
+            "query_parameters": params,
+            "timestamp": datetime.now().isoformat()
+        }
+
+    except QueryBuildError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except DatabaseError as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Unexpected error: {str(e)}"
+        )
+
+
+@router.get(
+    "/transactions/{transaction_id}",
+    response_model=TransactionResponse,
+    summary="Get Transaction by ID",
+    description="Get a single transaction by its ID with optional related entities"
+)
+async def get_transaction_by_id(
+        transaction_id: int,
+        include_relationships: bool = Query(False, description="Include related company relationships"),
+        include_advisors: bool = Query(False, description="Include transaction advisors"),
+        api_key: Dict = Depends(get_api_key)
+):
+    try:
+        transaction = await TransactionController.get_transaction_with_related(
+            transaction_id,
+            include_relationships,
+            include_advisors
+        )
+
+        if not transaction:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Transaction {transaction_id} not found"
+            )
+
+        return {
+            "data": [transaction],
+            "query_parameters": {
+                "transactionId": str(transaction_id),
+                "include_relationships": str(include_relationships),
+                "include_advisors": str(include_advisors)
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+    except QueryBuildError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except DatabaseError as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@router.get(
+    "/transactions/count",
+    response_model=TransactionResponse,
+    summary="Count Transactions",
+    description="Count transactions matching the filter criteria"
+)
+async def count_transactions(
+        request: Request,
+        # Include the same parameter definitions as in the main route
+        # You can copy the relevant parameters from the main route
+        # For brevity, I'll include just a few key parameters here
+        type: Optional[str] = Query(
+            None,
+            description="Transaction type ID (e.g., '1' for M&A, '2' for Acquisitions, '14' for Buybacks)",
+            example="2",
+            openapi_extra={"nullable": True}
+        ),
+        year: Optional[str] = Query(
+            None,
+            description="Announced year. Supports operators: gte:, lte:, gt:, lt:, ne:, between:",
+            example="gte:2020",
+            openapi_extra={"nullable": True}
+        ),
+        industry: Optional[str] = Query(
+            None,
+            description="Industry ID. Multiple values supported with comma separator.",
+            example="32,34",
+            openapi_extra={"nullable": True}
+        ),
+        country: Optional[str] = Query(
+            None,
+            description="Country ID. Multiple values supported with comma separator.",
+            example="131,147",
+            openapi_extra={"nullable": True}
+        ),
+        companyId: Optional[str] = Query(
+            None,
+            description="Company ID (for any role in transaction)",
+            example="21719",
+            openapi_extra={"nullable": True}
+        ),
+        # Add other parameters as needed
+        api_key: Dict = Depends(get_api_key)
+):
+    try:
+        # Build parameters dictionary from provided values
+        params = {}
+
+        # Get all local variables except these excluded ones
+        exclude_keys = ['request', 'api_key', 'params']
+
+        # Add explicitly defined parameters that were provided (not None)
+        for key, value in locals().items():
+            if key not in exclude_keys and value is not None:
+                params[key] = value
+
+        # Get count
+        count = await TransactionController.count_transactions(params)
+
+        return {
+            "data": [{"count": count}],
+            "query_parameters": params,
+            "timestamp": datetime.now().isoformat()
+        }
+    except QueryBuildError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except DatabaseError as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
