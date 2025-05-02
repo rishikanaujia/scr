@@ -1,6 +1,6 @@
 """API routes for transaction queries."""
 from datetime import datetime
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
 
@@ -65,296 +65,296 @@ router = APIRouter(
 async def query_transactions(
         request: Request,
         # Transaction type and basic filters
-        type: Optional[str] = Query(
+        type: str = Query(
             None,
             description="Transaction type ID (e.g., '1' for M&A, '2' for Acquisitions, '7' for Spin-offs, '10' for Fund Raises, '12' for Bankruptcies, '14' for Buybacks)",
             example="2",
             openapi_extra={"nullable": True}
         ),
         # Date filters
-        year: Optional[str] = Query(
+        year: str = Query(
             None,
             description="Announced year. Supports operators: gte:, lte:, gt:, lt:, ne:, between:, and comma-separated lists",
             example="gte:2020",
             openapi_extra={"nullable": True}
         ),
-        month: Optional[str] = Query(
+        month: str = Query(
             None,
             description="Announced month (1-12)",
             example="05",
             openapi_extra={"nullable": True}
         ),
-        day: Optional[str] = Query(
+        day: str = Query(
             None,
             description="Announced day (1-31)",
             example="15",
             openapi_extra={"nullable": True}
         ),
-        announcedYear: Optional[str] = Query(
+        announcedYear: str = Query(
             None,
             description="Alternative parameter for announced year",
             example="2023",
             openapi_extra={"nullable": True}
         ),
-        announcedMonth: Optional[str] = Query(
+        announcedMonth: str = Query(
             None,
             description="Alternative parameter for announced month",
             example="3",
             openapi_extra={"nullable": True}
         ),
-        announcedDay: Optional[str] = Query(
+        announcedDay: str = Query(
             None,
             description="Alternative parameter for announced day",
             example="21",
             openapi_extra={"nullable": True}
         ),
         # Location and industry filters
-        country: Optional[str] = Query(
+        country: str = Query(
             None,
             description="Country ID. Multiple values supported with comma separator.",
             example="131,147",
             openapi_extra={"nullable": True}
         ),
-        industry: Optional[str] = Query(
+        industry: str = Query(
             None,
             description="Industry ID. Multiple values supported with comma separator.",
             example="32,34",
             openapi_extra={"nullable": True}
         ),
         # Company identifiers
-        companyId: Optional[str] = Query(
+        companyId: str = Query(
             None,
             description="Company ID (for any role in transaction)",
             example="21719",
             openapi_extra={"nullable": True}
         ),
-        company: Optional[str] = Query(
+        company: str = Query(
             None,
             description="Alternative parameter for company ID",
             example="456",
             openapi_extra={"nullable": True}
         ),
-        companyName: Optional[str] = Query(
+        companyName: str = Query(
             None,
             description="Company name search (partial match)",
             example="Tech",
             openapi_extra={"nullable": True}
         ),
-        involvedCompanyId: Optional[str] = Query(
+        involvedCompanyId: str = Query(
             None,
             description="Company ID that was involved in any role in the transaction",
             example="972190",
             openapi_extra={"nullable": True}
         ),
         # Transaction details
-        transactionId: Optional[str] = Query(
+        transactionId: str = Query(
             None,
             description="Specific transaction ID for lookup",
             example="12345",
             openapi_extra={"nullable": True}
         ),
-        transactionSize: Optional[str] = Query(
+        transactionSize: str = Query(
             None,
             description="Transaction size/value. Supports operators: gte:, lte:, gt:, lt:, ne:, null:, notnull:",
             example="gte:1000000",
             openapi_extra={"nullable": True}
         ),
-        size: Optional[str] = Query(
+        size: str = Query(
             None,
             description="Alternative parameter for transaction size",
             example="gte:1000000",
             openapi_extra={"nullable": True}
         ),
-        statusId: Optional[str] = Query(
+        statusId: str = Query(
             None,
             description="Transaction status ID (e.g., '2' for Completed)",
             example="2",
             openapi_extra={"nullable": True}
         ),
         # Currency related
-        currencyId: Optional[str] = Query(
+        currencyId: str = Query(
             None,
             description="Currency ID (e.g., '50' for USD)",
             example="50",
             openapi_extra={"nullable": True}
         ),
-        currencyIsoCode: Optional[str] = Query(
+        currencyIsoCode: str = Query(
             None,
             description="Currency ISO code (e.g., USD, EUR)",
             example="USD",
             openapi_extra={"nullable": True}
         ),
-        currencyName: Optional[str] = Query(
+        currencyName: str = Query(
             None,
             description="Currency name",
             example="US Dollar",
             openapi_extra={"nullable": True}
         ),
         # Relationship identifiers
-        buyerId: Optional[str] = Query(
+        buyerId: str = Query(
             None,
             description="Buyer company ID",
             example="29096",
             openapi_extra={"nullable": True}
         ),
-        sellerId: Optional[str] = Query(
+        sellerId: str = Query(
             None,
             description="Seller company ID",
             example="112350",
             openapi_extra={"nullable": True}
         ),
-        targetId: Optional[str] = Query(
+        targetId: str = Query(
             None,
             description="Target company ID",
             example="789",
             openapi_extra={"nullable": True}
         ),
-        acquirerId: Optional[str] = Query(
+        acquirerId: str = Query(
             None,
             description="Acquirer company ID",
             example="234",
             openapi_extra={"nullable": True}
         ),
-        relationType: Optional[str] = Query(
+        relationType: str = Query(
             None,
             description="Relation type ID between companies (e.g., '1' for Buyer-Target)",
             example="1",
             openapi_extra={"nullable": True}
         ),
-        transactionToCompRelTypeId: Optional[str] = Query(
+        transactionToCompRelTypeId: str = Query(
             None,
             description="Transaction to company relationship type ID",
             example="1",
             openapi_extra={"nullable": True}
         ),
-        transactionToCompanyRelType: Optional[str] = Query(
+        transactionToCompanyRelType: str = Query(
             None,
             description="Transaction to company relationship type name",
             example="Buyer",
             openapi_extra={"nullable": True}
         ),
         # Related entity names
-        targetCompanyName: Optional[str] = Query(
+        targetCompanyName: str = Query(
             None,
             description="Target company name (for search)",
             example="Target Corp",
             openapi_extra={"nullable": True}
         ),
-        buyerCompanyName: Optional[str] = Query(
+        buyerCompanyName: str = Query(
             None,
             description="Buyer company name (for search)",
             example="Buyer Inc",
             openapi_extra={"nullable": True}
         ),
-        sellerCompanyName: Optional[str] = Query(
+        sellerCompanyName: str = Query(
             None,
             description="Seller company name (for search)",
             example="Seller Ltd",
             openapi_extra={"nullable": True}
         ),
-        involvedCompanyName: Optional[str] = Query(
+        involvedCompanyName: str = Query(
             None,
             description="Name of company involved in transaction",
             example="Involved Corp",
             openapi_extra={"nullable": True}
         ),
         # Industry descriptors
-        simpleIndustryDescription: Optional[str] = Query(
+        simpleIndustryDescription: str = Query(
             None,
             description="Simple industry description (for search)",
             example="Technology",
             openapi_extra={"nullable": True}
         ),
-        targetIndustryDescription: Optional[str] = Query(
+        targetIndustryDescription: str = Query(
             None,
             description="Target company industry description",
             example="Software",
             openapi_extra={"nullable": True}
         ),
-        buyerIndustryDescription: Optional[str] = Query(
+        buyerIndustryDescription: str = Query(
             None,
             description="Buyer company industry description",
             example="Hardware",
             openapi_extra={"nullable": True}
         ),
         # Transaction type name
-        transactionIdTypeName: Optional[str] = Query(
+        transactionIdTypeName: str = Query(
             None,
             description="Transaction type name",
             example="Acquisition",
             openapi_extra={"nullable": True}
         ),
         # Cross filters (by country or industry for related entities)
-        buyerCountry: Optional[str] = Query(
+        buyerCountry: str = Query(
             None,
             description="Buyer company country ID",
             example="213",
             openapi_extra={"nullable": True}
         ),
-        targetCountry: Optional[str] = Query(
+        targetCountry: str = Query(
             None,
             description="Target company country ID",
             example="37",
             openapi_extra={"nullable": True}
         ),
-        buyerIndustry: Optional[str] = Query(
+        buyerIndustry: str = Query(
             None,
             description="Buyer company industry ID",
             example="56",
             openapi_extra={"nullable": True}
         ),
-        targetIndustry: Optional[str] = Query(
+        targetIndustry: str = Query(
             None,
             description="Target company industry ID",
             example="61",
             openapi_extra={"nullable": True}
         ),
         # Advisor related
-        advisorId: Optional[str] = Query(
+        advisorId: str = Query(
             None,
             description="Advisor company ID",
             example="398625",
             openapi_extra={"nullable": True}
         ),
-        advisorTypeId: Optional[str] = Query(
+        advisorTypeId: str = Query(
             None,
             description="Advisor type ID (e.g., '2' for Legal)",
             example="2",
             openapi_extra={"nullable": True}
         ),
-        advisorCompanyName: Optional[str] = Query(
+        advisorCompanyName: str = Query(
             None,
             description="Advisor company name (for search)",
             example="Legal Advisors Inc",
             openapi_extra={"nullable": True}
         ),
         # Query structure parameters
-        select: Optional[str] = Query(
+        select: str = Query(
             None,
             description="Fields to select (comma-separated), can include functions like COUNT(), SUM(), AVG()",
             example="companyName,COUNT(transactionId) AS count",
             openapi_extra={"nullable": True}
         ),
-        groupBy: Optional[str] = Query(
+        groupBy: str = Query(
             None,
             description="Fields to group by (comma-separated)",
             example="companyName,announcedYear",
             openapi_extra={"nullable": True}
         ),
-        orderBy: Optional[str] = Query(
+        orderBy: str = Query(
             None,
             description="Fields to order by with direction (field:asc|desc)",
             example="transactionSize:desc,announcedYear:desc",
             openapi_extra={"nullable": True}
         ),
-        limit: Optional[int] = Query(
+        limit: int = Query(
             None,
             description="Maximum number of results",
             example=20,
             ge=1,
             openapi_extra={"nullable": True}
         ),
-        offset: Optional[int] = Query(
+        offset: int = Query(
             None,
             description="Number of results to skip",
             example=0,
@@ -362,49 +362,49 @@ async def query_transactions(
             openapi_extra={"nullable": True}
         ),
         # Special operation mode parameters
-        count_only: Optional[bool] = Query(
+        count_only: bool = Query(
             False,
             description="Return only the count of matching transactions",
             example=False
         ),
-        page: Optional[int] = Query(
+        page: int = Query(
             None,
             description="Page number for pagination",
             example=1,
             ge=1,
             openapi_extra={"nullable": True}
         ),
-        page_size: Optional[int] = Query(
+        page_size: int = Query(
             None,
             description="Number of items per page",
             example=10,
             ge=1,
             openapi_extra={"nullable": True}
         ),
-        include_relationships: Optional[bool] = Query(
+        include_relationships: bool = Query(
             False,
             description="Include related company relationships",
             example=False
         ),
-        include_advisors: Optional[bool] = Query(
+        include_advisors: bool = Query(
             False,
             description="Include transaction advisors",
             example=False
         ),
-        includeAdvisors: Optional[str] = Query(
+        includeAdvisors: str = Query(
             None,
             description="Alternative parameter to include advisors ('true'/'false')",
             example="true",
             openapi_extra={"nullable": True}
         ),
         # Analysis parameters
-        analysisType: Optional[str] = Query(
+        analysisType: str = Query(
             None,
             description="Type of analysis to perform",
             example="trend",
             openapi_extra={"nullable": True}
         ),
-        fields: Optional[str] = Query(
+        fields: str = Query(
             None,
             description="Fields to include in analysis (comma-separated)",
             example="year,month,size",
@@ -651,33 +651,32 @@ async def get_transaction_by_id(
 async def count_transactions(
         request: Request,
         # Include the same parameter definitions as in the main route
-        # You can copy the relevant parameters from the main route
         # For brevity, I'll include just a few key parameters here
-        type: Optional[str] = Query(
+        type: str = Query(
             None,
             description="Transaction type ID (e.g., '1' for M&A, '2' for Acquisitions, '14' for Buybacks)",
             example="2",
             openapi_extra={"nullable": True}
         ),
-        year: Optional[str] = Query(
+        year: str = Query(
             None,
             description="Announced year. Supports operators: gte:, lte:, gt:, lt:, ne:, between:",
             example="gte:2020",
             openapi_extra={"nullable": True}
         ),
-        industry: Optional[str] = Query(
+        industry: str = Query(
             None,
             description="Industry ID. Multiple values supported with comma separator.",
             example="32,34",
             openapi_extra={"nullable": True}
         ),
-        country: Optional[str] = Query(
+        country: str = Query(
             None,
             description="Country ID. Multiple values supported with comma separator.",
             example="131,147",
             openapi_extra={"nullable": True}
         ),
-        companyId: Optional[str] = Query(
+        companyId: str = Query(
             None,
             description="Company ID (for any role in transaction)",
             example="21719",
