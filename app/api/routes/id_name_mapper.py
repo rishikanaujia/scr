@@ -97,19 +97,19 @@ class IDNameMapper:
         2: ("Seller", ["selling", "divesting"]),
     }
 
-    # Create reverse mappings
-    @classmethod
-    def _build_reverse_maps(cls):
-        """Build reverse maps (name->id) for all categories"""
-        cls._transaction_types_reverse = {}
-        cls._countries_reverse = {}
-        cls._industries_reverse = {}
-        cls._currencies_reverse = {}
-        cls._statuses_reverse = {}
-        cls._advisor_types_reverse = {}
-        cls._relation_types_reverse = {}
-        cls._currency_iso_codes = {}
+    # Reverse mappings
+    _transaction_types_reverse = {}
+    _countries_reverse = {}
+    _industries_reverse = {}
+    _currencies_reverse = {}
+    _statuses_reverse = {}
+    _advisor_types_reverse = {}
+    _relation_types_reverse = {}
+    _currency_iso_codes = {}
 
+    @classmethod
+    def build_reverse_maps(cls):
+        """Build reverse maps (name->id) for all categories"""
         # Build transaction types reverse map
         for id, (name, aliases) in cls.TRANSACTION_TYPES.items():
             cls._transaction_types_reverse[name.lower()] = id
@@ -152,10 +152,6 @@ class IDNameMapper:
             cls._relation_types_reverse[name.lower()] = id
             for alias in aliases:
                 cls._relation_types_reverse[alias.lower()] = id
-
-    # Initialize reverse maps
-    _build_reverse_maps = classmethod(_build_reverse_maps)
-    _build_reverse_maps()
 
     @classmethod
     def get_transaction_type_id(cls, type_name: str) -> Optional[int]:
@@ -301,6 +297,10 @@ class IDNameMapper:
         # Single value
         converted = converter_func(param_value)
         return str(converted) if converted is not None else param_value
+
+
+# Initialize the reverse maps
+IDNameMapper.build_reverse_maps()
 
 
 # Module-level functions for easy access
