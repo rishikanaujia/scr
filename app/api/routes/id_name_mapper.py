@@ -1,8 +1,8 @@
 """
 ID-Name Mapper Module for Transaction API
 
-This module provides mapping between human-readable names and numeric IDs
-for various entities in the transaction system.
+This module provides bidirectional mapping between human-readable names and numeric IDs
+for various entities in the transaction system, allowing the API to accept both formats.
 """
 from typing import Dict, List, Union, Optional, Tuple
 import re
